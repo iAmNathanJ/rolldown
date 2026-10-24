@@ -691,6 +691,7 @@ const InputOptionsSchema = v.strictObject({
           v.object({
             baseUrl: v.optional(v.string()),
             fileName: v.optional(v.string()),
+            include: v.optional(v.function()),
           }),
         ]),
       ),

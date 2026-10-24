@@ -1,4 +1,13 @@
-use napi::bindgen_prelude::Either;
+use std::{future::Future, pin::Pin, sync::Arc};
+
+use anyhow::Context as _;
+use derive_more::Debug;
+use napi::bindgen_prelude::{Either, FnArgs};
+
+use crate::{
+  options::binding_output_options::PreRenderedChunk,
+  types::js_callback::{JsCallback, JsCallbackExt as _},
+};
 
 #[napi_derive::napi(object, object_to_js = false)]
 #[derive(Debug, Default)]
@@ -122,10 +131,26 @@ impl From<BindingChunkModuleOrderBy> for rolldown_common::ChunkModulesOrderBy {
 pub struct BindingChunkImportMap {
   pub base_url: Option<String>,
   pub file_name: Option<String>,
+  #[napi(ts_type = "(chunk: PreRenderedChunk) => boolean")]
+  #[debug(skip)]
+  pub include: Option<JsCallback<FnArgs<(PreRenderedChunk,)>, bool>>,
 }
 
 impl From<BindingChunkImportMap> for rolldown_common::ChunkImportMap {
   fn from(value: BindingChunkImportMap) -> Self {
-    Self { base_url: value.base_url, file_name: value.file_name }
+    Self {
+      base_url: value.base_url,
+      file_name: value.file_name,
+      include: value.include.map(|func| {
+        Arc::new(move |chunk: &rolldown_common::RollupPreRenderedChunk| {
+          let func = Arc::clone(&func);
+          let chunk = (chunk.clone().into(),);
+          Box::pin(async move {
+            func.invoke_async(FnArgs { data: chunk }).await.context("chunkImportMap.include")
+          }) as Pin<Box<dyn Future<Output = anyhow::Result<bool>> + Send>>
+        }) as Arc<rolldown_common::ChunkImportMapIncludeFn>
+      }),
+      stable_names: Arc::default(),
+    }
   }
 }

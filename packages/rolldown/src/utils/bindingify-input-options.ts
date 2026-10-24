@@ -199,13 +199,23 @@ function bindingifyExperimental(
     devMode: bindingifyDevMode(experimental?.devMode),
     attachDebugInfo: bindingifyAttachDebugInfo(experimental?.attachDebugInfo),
     chunkModulesOrder,
-    chunkImportMap: experimental?.chunkImportMap,
+    chunkImportMap: bindingifyChunkImportMap(experimental?.chunkImportMap),
     onDemandWrapping: experimental?.onDemandWrapping,
     incrementalBuild: experimental?.incrementalBuild,
     nativeMagicString: experimental?.nativeMagicString,
     chunkOptimization: experimental?.chunkOptimization,
     lazyBarrel: experimental?.lazyBarrel,
   };
+}
+
+function bindingifyChunkImportMap(
+  chunkImportMap: NonNullable<InputOptions['experimental']>['chunkImportMap'],
+): BindingExperimentalOptions['chunkImportMap'] {
+  if (typeof chunkImportMap !== 'object' || chunkImportMap === null) {
+    return chunkImportMap;
+  }
+  const { include, ...rest } = chunkImportMap;
+  return include ? { ...rest, include: (chunk) => Boolean(include(chunk)) } : rest;
 }
 
 function bindingifyResolve(resolve: InputOptions['resolve']): BindingInputOptions['resolve'] {

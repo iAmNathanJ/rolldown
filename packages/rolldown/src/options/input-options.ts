@@ -5,6 +5,7 @@ import type {
   RolldownLog,
   RolldownLogWithString,
 } from '../log/logging';
+import type { PreRenderedChunk } from '../binding.cjs';
 import type { RolldownPluginOption } from '../plugin';
 import type { TreeshakingOptions } from '../types/module-side-effects';
 import type { NullValue, StringOrRegExp } from '../types/utils';
@@ -651,7 +652,22 @@ export interface InputOptions {
      *
      * @default false
      */
-    chunkImportMap?: boolean | { baseUrl?: string; fileName?: string };
+    chunkImportMap?:
+      | boolean
+      | {
+          baseUrl?: string;
+          fileName?: string;
+          /**
+           * Which hashed chunks get a stable name in the import map. Every hashed chunk is
+           * mapped when unset.
+           *
+           * Importers reference a mapped chunk by its stable name, so its content can change
+           * without renaming them. An importer's hash still covers the hashed chunks reached
+           * *through* a mapped chunk, since post-hash tooling (e.g. Vite's `__vite__mapDeps`)
+           * writes those names into the importer.
+           */
+          include?: (chunk: PreRenderedChunk) => boolean;
+        };
 
     /**
      * Under `output.strictExecutionOrder`, derive a conservative wrapping plan from predicted

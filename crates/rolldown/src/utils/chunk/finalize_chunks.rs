@@ -32,14 +32,20 @@ use crate::{
   chunk_graph::ChunkGraph,
   stages::link_stage::LinkStageOutput,
   type_alias::{AssetVec, IndexChunkToInstances, IndexInstantiatedChunks},
-  utils::process_code_and_sourcemap::{emit_sourcemap, prepare_sourcemap},
+  utils::{
+    chunk::chunk_import_map_stable_names::{
+      collapse_mapped_dependencies, collect_stable_hashes, static_dependencies_of_mapped,
+      substitute_stable_hashes,
+    },
+    process_code_and_sourcemap::{emit_sourcemap, prepare_sourcemap},
+  },
 };
 
 #[tracing::instrument(level = "debug", skip_all)]
 pub async fn finalize_assets(
   chunk_graph: &ChunkGraph,
   link_output: &LinkStageOutput,
-  index_instantiated_chunks: IndexInstantiatedChunks,
+  mut index_instantiated_chunks: IndexInstantiatedChunks,
   index_chunk_to_instances: &IndexChunkToInstances,
   hash_characters: HashCharacters,
   options: &NormalizedBundlerOptions,
@@ -49,11 +55,11 @@ pub async fn finalize_assets(
     .iter_enumerated()
     .filter_map(|(ins_chunk_idx, ins_chunk)| {
       ins_chunk.preliminary_filename.hash_placeholder().map(move |placeholders| {
-        placeholders.iter().map(move |hash_placeholder| (hash_placeholder.as_str(), ins_chunk_idx))
+        placeholders.iter().map(move |hash_placeholder| (hash_placeholder.clone(), ins_chunk_idx))
       })
     })
     .flatten()
-    .collect::<FxHashMap<_, _>>();
+    .collect::<FxHashMap<String, _>>();
 
   let index_direct_dependencies: IndexVec<InsChunkIdx, Vec<InsChunkIdx>> =
     index_instantiated_chunks
@@ -62,7 +68,7 @@ pub async fn finalize_assets(
         if let StrOrBytes::Str(content) = &asset.content {
           extract_hash_placeholders(content, &HASH_PLACEHOLDER_LEFT_FINDER)
             .iter()
-            .filter_map(|placeholder| ins_chunk_idx_by_placeholder.get(placeholder).copied())
+            .filter_map(|placeholder| ins_chunk_idx_by_placeholder.get(*placeholder).copied())
             .collect_vec()
         } else {
           vec![]
@@ -70,6 +76,37 @@ pub async fn finalize_assets(
       })
       .collect::<Vec<_>>()
       .into();
+
+  // Chunks in the chunk import map are referenced through a stable name and are transparent
+  // for hashing: importers depend on what they depend on, not on their content. Stable names are
+  // written into contents before Phase 1 so the bytes an importer ends up with are hashed, and
+  // the dependency graph was read above, before that, so the edges through them are known.
+  let index_direct_dependencies = match &options.experimental.chunk_import_map {
+    Some(chunk_import_map) => {
+      let stable_hash_by_placeholder = collect_stable_hashes(
+        chunk_import_map,
+        chunk_graph,
+        link_output,
+        &index_instantiated_chunks,
+        hash_characters,
+        options,
+      )
+      .await?;
+      substitute_stable_hashes(&mut index_instantiated_chunks, &stable_hash_by_placeholder);
+      let mapped = stable_hash_by_placeholder
+        .keys()
+        .filter_map(|placeholder| ins_chunk_idx_by_placeholder.get(placeholder.as_str()).copied())
+        .collect::<FxHashSet<_>>();
+      let static_deps_of_mapped = static_dependencies_of_mapped(
+        &mapped,
+        &index_instantiated_chunks,
+        chunk_graph,
+        index_chunk_to_instances,
+      );
+      collapse_mapped_dependencies(&index_direct_dependencies, &mapped, &static_deps_of_mapped)
+    }
+    None => index_direct_dependencies,
+  };
 
   let index_sourcemap_hash_placeholders: IndexVec<InsChunkIdx, Option<Vec<String>>> =
     index_instantiated_chunks

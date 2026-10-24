@@ -12,7 +12,7 @@ use rustc_hash::FxHashMap;
 pub use binding_comments_options::BindingCommentsOptions;
 pub use binding_generated_code_options::BindingGeneratedCodeOptions;
 use binding_manual_code_splitting_options::BindingManualCodeSplittingOptions;
-use binding_pre_rendered_chunk::PreRenderedChunk;
+pub use binding_pre_rendered_chunk::PreRenderedChunk;
 
 use super::plugin::BindingPluginOrParallelJsPluginPlaceholder;
 use crate::types::{

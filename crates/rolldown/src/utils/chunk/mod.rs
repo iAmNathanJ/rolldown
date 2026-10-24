@@ -9,6 +9,7 @@ use rustc_hash::FxHashMap;
 
 use crate::{stages::link_stage::LinkStageOutput, types::generator::GenerateContext};
 
+pub mod chunk_import_map_stable_names;
 pub mod conflict_resolver;
 pub mod deconflict_chunk_symbols;
 pub mod determine_export_mode;

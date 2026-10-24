@@ -2021,6 +2021,7 @@ export interface BindingChecksOptions {
 export interface BindingChunkImportMap {
   baseUrl?: string
   fileName?: string
+  include?: (chunk: PreRenderedChunk) => boolean
 }
 
 export declare enum BindingChunkModuleOrderBy {
